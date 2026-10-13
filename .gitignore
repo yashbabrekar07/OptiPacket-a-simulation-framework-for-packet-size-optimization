@@ -5,3 +5,8 @@ results/exp2_latency.png
 results/exp2_retx.png
 results/per_packet_log.csv
 results/summary.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class

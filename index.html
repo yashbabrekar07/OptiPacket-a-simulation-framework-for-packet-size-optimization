@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulse · DCN Packet Size & Throughput Optimization Simulator</title>
+  <meta name="description" content="A minimalist, high-precision simulator for Stop-and-Wait ARQ network protocols, studying the impact of payload size and Bit Error Rate (BER) on throughput, goodput, and latency.">
+  
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js for High-Definition Interactive Graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    
+    <!-- Top Navigation Header -->
+    <header class="top-nav" id="topNav">
+      <div class="nav-left">
+        <div class="brand-badge">
+          <div class="brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12h5l3-8 4 16 3-8h5"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-title">PULSE <span class="badge-tag">DCN</span></span>
+            <span class="brand-sub">Packet Optimization Simulator</span>
+          </div>
+        </div>
+
+        <div class="channel-presets">
+          <span class="preset-label">Presets:</span>
+          <div class="preset-pills" id="presetPills">
+            <button class="preset-btn active" data-preset="baseline">⚡ Baseline (Clean)</button>
+            <button class="preset-btn" data-preset="lan">🚀 Gigabit LAN</button>
+            <button class="preset-btn" data-preset="wireless">📶 4G Wireless</button>
+            <button class="preset-btn" data-preset="noisy">⚡ Noisy Link</button>
+            <button class="preset-btn" data-preset="satellite">🛰️ Satellite GEO</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <div class="backend-status" id="backendStatusBadge" title="FastAPI Backend Status">
+          <span class="status-dot online"></span>
+          <span class="status-label">Engine Ready</span>
+        </div>
+        <button class="action-btn primary" id="btnRunSim" title="Run transfer simulation with current parameters">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span>Simulate</span>
+        </button>
+        <button class="action-btn secondary" id="btnRunSweep" title="Run Phase 3 multi-BER parameter sweep">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <span>Run Sweep</span>
+        </button>
+        <button class="action-btn ghost" id="btnExportCSV" title="Export current simulation logs to CSV">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>Export CSV</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <div class="workspace-grid">
+      
+      <!-- Left Configuration Panel -->
+      <aside class="config-sidebar" id="configSidebar">
+        <div class="sidebar-header">
+          <h2>Channel & Link Config</h2>
+          <button class="reset-link-btn" id="btnResetConfig" title="Reset parameters to default">Reset</button>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Bandwidth -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="cfgBandwidth">Bandwidth</label>
+              <span class="value-badge" id="lblBandwidth">10.0 Mbps</span>
+            </div>
+            <div class="slider-container">
+              <input type="range" id="cfgBandwidth" min="1" max="100" step="1" value="10">
+            </div>
+            <div class="subtext">Channel transmission rate ($B$)</div>
+          </div>
+
+          <!-- Propagation Delay -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="cfgDelay">One-Way Propagation Delay</label>
+              <span class="value-badge" id="lblDelay">10.0 ms</span>
+            </div>
+            <div class="slider-container">
+              <input type="range" id="cfgDelay" min="1" max="250" step="1" value="10">
+            </div>
+            <div class="subtext">Ideal RTT $\approx 2 \times t_{prop} + t_{tx}$</div>
+          </div>
+
+          <!-- Bit Error Rate (BER) -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="cfgBer">Bit Error Rate (BER)</label>
+              <span class="value-badge highlight" id="lblBer">0.0 (Clean)</span>
+            </div>
+            <div class="slider-container">
+              <!-- Logarithmic discrete index from 0 to 6 -->
+              <input type="range" id="cfgBer" min="0" max="6" step="1" value="0">
+            </div>
+            <div class="ber-steps">
+              <span>0</span>
+              <span>10⁻⁶</span>
+              <span>10⁻⁵</span>
+              <span>5·10⁻⁵</span>
+              <span>10⁻⁴</span>
+              <span>10⁻³</span>
+            </div>
+            <div class="subtext" id="berExplanation">P(error per bit). Clean optical link.</div>
+          </div>
+
+          <!-- Divider -->
+          <div class="sidebar-divider"></div>
+
+          <!-- Payload / Packet Size -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="cfgPayload">Payload Size (Packet Size)</label>
+              <span class="value-badge accent" id="lblPayload">1024 B</span>
+            </div>
+            <div class="slider-container">
+              <input type="range" id="cfgPayload" min="64" max="8192" step="64" value="1024">
+            </div>
+            <div class="quick-chips" id="payloadChips">
+              <button class="chip" data-size="64">64B</button>
+              <button class="chip" data-size="256">256B</button>
+              <button class="chip" data-size="512">512B</button>
+              <button class="chip active" data-size="1024">1024B</button>
+              <button class="chip" data-size="1500">1500 MTU</button>
+              <button class="chip" data-size="2048">2048B</button>
+              <button class="chip" data-size="4096">4096B</button>
+              <button class="chip" data-size="8192">8192B</button>
+            </div>
+            <div class="subtext">Application data per frame ($L$)</div>
+          </div>
+
+          <!-- Optimal Packet Size Auto-Solver Button -->
+          <div class="opt-advisor-box" id="optAdvisorBox">
+            <div class="opt-info">
+              <div class="opt-title">Recommended Optimum</div>
+              <div class="opt-val" id="optPayloadVal">8192 B</div>
+              <div class="opt-desc" id="optPayloadDesc">Theoretical max Goodput: ~2.43 Mbps</div>
+            </div>
+            <button class="opt-apply-btn" id="btnApplyOptimum">Apply $L^*$</button>
+          </div>
+
+          <!-- Advanced Collapsible Parameters -->
+          <details class="adv-settings">
+            <summary>Protocol Overhead & Limits</summary>
+            <div class="adv-content">
+              <div class="adv-item">
+                <label for="cfgHeader">Header Overhead</label>
+                <div class="input-with-unit">
+                  <input type="number" id="cfgHeader" value="40" min="0" max="256">
+                  <span>Bytes</span>
+                </div>
+              </div>
+              <div class="adv-item">
+                <label for="cfgAck">ACK Frame Size</label>
+                <div class="input-with-unit">
+                  <input type="number" id="cfgAck" value="40" min="0" max="256">
+                  <span>Bytes</span>
+                </div>
+              </div>
+              <div class="adv-item">
+                <label for="cfgTimeoutMargin">Timeout Margin</label>
+                <div class="input-with-unit">
+                  <input type="number" id="cfgTimeoutMargin" value="5" min="0" max="100">
+                  <span>ms</span>
+                </div>
+              </div>
+              <div class="adv-item">
+                <label for="cfgTotalBytes">Transfer Size</label>
+                <div class="input-with-unit">
+                  <input type="number" id="cfgTotalBytes" value="500" min="10" max="5000">
+                  <span>KB</span>
+                </div>
+              </div>
+              <div class="adv-item">
+                <label for="cfgMaxRetries">Max Retries</label>
+                <div class="input-with-unit">
+                  <input type="number" id="cfgMaxRetries" value="100" min="1" max="1000">
+                  <span>tries</span>
+                </div>
+              </div>
+            </div>
+          </details>
+
+        </div>
+      </aside>
+
+      <!-- Right Main Content Canvas -->
+      <main class="main-content" id="mainContent">
+        
+        <!-- Tab Navigation Bar -->
+        <div class="content-tabs">
+          <button class="tab-btn active" data-tab="visualizer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+              <path d="M2 12h20"/>
+            </svg>
+            <span>ARQ Visualizer</span>
+          </button>
+
+          <button class="tab-btn" data-tab="analytics">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            <span>Optimization Charts</span>
+          </button>
+
+          <button class="tab-btn" data-tab="theory">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            <span>Theory & Model</span>
+          </button>
+
+          <button class="tab-btn" data-tab="inspector">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>Packet Inspector</span>
+          </button>
+
+          <button class="tab-btn" data-tab="python">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            <span>Python Script & Plots</span>
+          </button>
+        </div>
+
+        <!-- Metric KPI Cards Bar (Always visible) -->
+        <div class="metrics-grid" id="metricsGrid">
+          <div class="metric-card" id="cardGoodput">
+            <div class="metric-header">
+              <span class="metric-label">Delivered Goodput</span>
+              <span class="metric-tag good">Useful Data</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number" id="valGoodput">0.392</span>
+              <span class="metric-unit">Mbps</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-sub" id="subGoodputEff">Efficiency: 96.2%</span>
+            </div>
+          </div>
+
+          <div class="metric-card" id="cardThroughput">
+            <div class="metric-header">
+              <span class="metric-label">Wire Throughput</span>
+              <span class="metric-tag info">Wire Traffic</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number" id="valThroughput">0.407</span>
+              <span class="metric-unit">Mbps</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-sub" id="subThroughputOverhead">Includes 40B Header</span>
+            </div>
+          </div>
+
+          <div class="metric-card" id="cardLatency">
+            <div class="metric-header">
+              <span class="metric-label">Average Latency</span>
+              <span class="metric-tag">Per-Packet</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number" id="valLatency">20.88</span>
+              <span class="metric-unit">ms</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-sub" id="subP95Latency">P95: 20.88 ms</span>
+            </div>
+          </div>
+
+          <div class="metric-card" id="cardRetx">
+            <div class="metric-header">
+              <span class="metric-label">Retransmission Rate</span>
+              <span class="metric-tag warn">ARQ Retries</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number" id="valRetx">0.00</span>
+              <span class="metric-unit">retx/pkt</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-sub" id="subLossRate">Loss: 0.0%</span>
+            </div>
+          </div>
+
+          <div class="metric-card" id="cardFrameError">
+            <div class="metric-header">
+              <span class="metric-label">Frame Error Prob (P<sub>err</sub>)</span>
+              <span class="metric-tag accent">BER Calculated</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number" id="valPerr">0.00</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-sub" id="subPerrFormula">1 - (1 - BER)<sup>8·Frame</sup></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= TAB 1: VISUALIZER ================= -->
+        <section class="tab-pane active" id="paneVisualizer">
+          <div class="visualizer-stage-card">
+            
+            <div class="stage-header">
+              <div class="stage-title-wrap">
+                <h3>Stop-and-Wait ARQ Transmission Stage</h3>
+                <span class="stage-status-badge" id="simStateBadge">IDLE</span>
+              </div>
+              <div class="stage-controls">
+                <div class="speed-control">
+                  <label for="animSpeed">Speed:</label>
+                  <select id="animSpeed">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1.0x</option>
+                    <option value="2">2.0x</option>
+                    <option value="5">5.0x</option>
+                    <option value="999">Instant</option>
+                  </select>
+                </div>
+                <button class="stage-btn" id="btnSimStep" title="Advance one packet step">Step</button>
+                <button class="stage-btn primary" id="btnSimToggle">Start Flow</button>
+                <button class="stage-btn warn" id="btnCorruptNext" title="Manually inject a bit error on the next transmission">⚡ Force Error</button>
+                <button class="stage-btn ghost" id="btnSimReset">Reset</button>
+              </div>
+            </div>
+
+            <!-- ARQ Network Pipeline Stage -->
+            <div class="pipeline-viewport">
+              
+              <!-- Sender Node -->
+              <div class="node-box sender" id="nodeSender">
+                <div class="node-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                    <line x1="6" y1="6" x2="6.01" y2="6"/>
+                    <line x1="6" y1="18" x2="6.01" y2="18"/>
+                  </svg>
+                </div>
+                <div class="node-label">SENDER</div>
+                <div class="node-telemetry">
+                  <div class="node-stat">Seq: <span id="teleSenderSeq" class="mono">0</span></div>
+                  <div class="node-stat">Attempt: <span id="teleSenderAttempt" class="mono">1</span></div>
+                  <div class="node-stat">Queue: <span id="teleSenderQueue" class="mono">488 pkts</span></div>
+                </div>
+                <div class="timer-dial-container" title="Stop-and-Wait Timeout Countdown">
+                  <div class="timer-dial-bar" id="timerDialBar"></div>
+                  <span class="timer-dial-text" id="timerDialText">Timer Idle</span>
+                </div>
+              </div>
+
+              <!-- Channel Wire with In-flight Packets -->
+              <div class="channel-wires" id="channelWires">
+                
+                <!-- Forward Data Wire -->
+                <div class="wire-track forward" id="wireForward">
+                  <div class="wire-label">Forward Data Path (Frame: Header + Payload)</div>
+                  <!-- Dynamic flying data packet injected by JS -->
+                  <div class="packet-capsule" id="packetCapsule" style="display: none;">
+                    <div class="packet-header-block" title="Header (40 Bytes)">H:40B</div>
+                    <div class="packet-payload-block" id="capsulePayloadText" title="Payload">P:1024B</div>
+                    <div class="packet-seq-badge" id="capsuleSeqBadge">#0</div>
+                  </div>
+                </div>
+
+                <!-- Channel Noise Field Indicator -->
+                <div class="channel-noise-field" id="noiseField">
+                  <div class="noise-pulse"></div>
+                  <span class="noise-label" id="noiseFieldLabel">Channel Medium · 10 Mbps · 10 ms Delay</span>
+                  <div class="error-flash-overlay" id="errorFlashOverlay">⚡ BIT ERROR DETECTED! PACKET CORRUPTED</div>
+                </div>
+
+                <!-- Return ACK Wire -->
+                <div class="wire-track reverse" id="wireReverse">
+                  <div class="wire-label">Return ACK Path (ACK: 40 Bytes)</div>
+                  <!-- Dynamic flying ACK packet injected by JS -->
+                  <div class="ack-capsule" id="ackCapsule" style="display: none;">
+                    <span class="ack-icon">✓</span>
+                    <span class="ack-text" id="ackCapsuleText">ACK #0</span>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- Receiver Node -->
+              <div class="node-box receiver" id="nodeReceiver">
+                <div class="node-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                  </svg>
+                </div>
+                <div class="node-label">RECEIVER</div>
+                <div class="node-telemetry">
+                  <div class="node-stat">Received: <span id="teleRxCount" class="mono">0</span></div>
+                  <div class="node-stat">CRC Check: <span id="teleRxCRC" class="mono text-green">PASS</span></div>
+                  <div class="node-stat">Delivered: <span id="teleRxBytes" class="mono">0 KB</span></div>
+                </div>
+                <div class="rx-status-pill" id="rxStatusPill">Ready</div>
+              </div>
+
+            </div>
+
+            <!-- Transfer Progress Bar -->
+            <div class="transfer-progress-bar">
+              <div class="progress-info">
+                <span>Transfer Progress: <strong id="progressPercent">0%</strong> (<span id="progressBytes">0</span> / <span id="progressTotal">500 KB</span>)</span>
+                <span>Packets: <strong id="progressPktsDone">0</strong> / <span id="progressPktsTotal">489</span></span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Mini live event feed underneath visualizer -->
+          <div class="live-event-feed-card">
+            <div class="feed-header">
+              <h4>Live Protocol Event Stream</h4>
+              <span class="feed-count" id="feedCount">0 events</span>
+            </div>
+            <div class="event-feed-stream" id="eventFeedStream">
+              <div class="event-feed-empty">Ready to transmit. Click "Start Flow" or "Step" above.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 2: ANALYTICS & CHARTS ================= -->
+        <section class="tab-pane" id="paneAnalytics">
+          
+          <div class="charts-toolbar">
+            <div class="toolbar-title">
+              <h3>Optimization Sweeps & Multi-BER Trade-off Curves</h3>
+              <p>Studying how payload size affects Goodput, Throughput, Latency, and Retransmission rates across channel error environments.</p>
+            </div>
+            <div class="toolbar-actions">
+              <button class="action-btn primary small" id="btnComputeSweep">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Recompute Sweep</span>
+              </button>
+              <button class="action-btn secondary small" id="btnLoadPythonCsv">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>Load Python summary.csv</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Optimal Packet Size Summary Cards Matrix -->
+          <div class="opt-matrix-card">
+            <div class="opt-matrix-header">
+              <h4>Optimal Packet Sizes ($L^*$) Found for Maximum Goodput</h4>
+              <span class="badge-tag">Phase 3 Benchmark</span>
+            </div>
+            <div class="opt-chips-grid" id="optMatrixGrid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Grid of 4 Interactive Charts -->
+          <div class="charts-grid">
+            
+            <!-- Chart 1: Goodput vs Packet Size -->
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title">Goodput vs. Packet Size</h4>
+                  <span class="chart-desc">Useful application data rate (Mbps) under different BERs</span>
+                </div>
+                <span class="chart-tag good">Key Optimization</span>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartGoodput"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 2: Throughput & Efficiency -->
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title">Throughput vs. Packet Size</h4>
+                  <span class="chart-desc">Total wire transmission rate (Payload + Header)</span>
+                </div>
+                <span class="chart-tag info">Wire Speed</span>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartThroughput"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 3: Average Latency -->
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title">Average Latency vs. Packet Size</h4>
+                  <span class="chart-desc">Per-packet round-trip duration including retransmission timeouts</span>
+                </div>
+                <span class="chart-tag">Duration (ms)</span>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartLatency"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 4: Retransmission Rate -->
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title">Retransmissions per Packet vs. Size</h4>
+                  <span class="chart-desc">Excess attempts caused by bit corruption ($P_{err}$)</span>
+                </div>
+                <span class="chart-tag warn">ARQ Retries</span>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartRetx"></canvas>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ================= TAB 3: THEORY & MATH ================= -->
+        <section class="tab-pane" id="paneTheory">
+          <div class="theory-container">
+            
+            <div class="theory-hero">
+              <h3>Stop-and-Wait ARQ Protocol & Packet Optimization Mechanics</h3>
+              <p>Understanding why there exists an optimal packet size $L^*$ and how Bit Error Rate (BER) shifts this equilibrium.</p>
+            </div>
+
+            <div class="theory-cards-grid">
+              
+              <div class="theory-card">
+                <div class="theory-card-badge">Force 1: Protocol Header Overhead</div>
+                <h4>Small Packets $\implies$ Low Efficiency</h4>
+                <p>Every frame carries a fixed header ($H = 40$ bytes: IP + TCP). When the payload $L$ is small, header overhead dominates:</p>
+                <div class="equation-box mono">
+                  Efficiency = \frac{L}{L + H}
+                </div>
+                <p>For example, with $L = 64$ bytes, efficiency is only $64 / 104 \approx 61.5\%$. Even worse, Stop-and-Wait protocol requires an ACK round-trip delay ($2 \times t_{prop}$) for every single 64-byte frame, leaving the channel idle 99% of the time.</p>
+              </div>
+
+              <div class="theory-card">
+                <div class="theory-card-badge">Force 2: Bit Error Vulnerability</div>
+                <h4>Large Packets $\implies$ High Frame Loss</h4>
+                <p>A frame of size $F = L + H$ bytes ($8F$ bits) is corrupted if even a single bit flips. Given independent bit errors with probability $\text{BER}$:</p>
+                <div class="equation-box mono">
+                  P_{err} = 1 - (1 - \text{BER})^{8(L + H)}
+                </div>
+                <p>As $L$ increases, $P_{err}$ approaches $100\%$. In Stop-and-Wait ARQ, a corrupted packet forces a timeout of duration $t_{timeout}$, triggering retransmissions that destroy goodput.</p>
+              </div>
+
+              <div class="theory-card highlight">
+                <div class="theory-card-badge">The Synthesis</div>
+                <h4>The Fundamental Trade-off ($L^*$)</h4>
+                <p>The effective Goodput $G(L)$ is given by the delivered useful bits divided by the expected time per frame:</p>
+                <div class="equation-box mono">
+                  Goodput(L) = \frac{8L}{E[\text{Time per frame}]} = \frac{8L \cdot (1 - P_{err})}{RTT + P_{err} \cdot t_{timeout}}
+                </div>
+                <p>Differentiating with respect to $L$ yields an optimal payload size $L^*$:</p>
+                <ul class="theory-list">
+                  <li><strong>BER = 0:</strong> $L^* \to \infty$ (Make packets as large as MTU allows, e.g. 8192 B).</li>
+                  <li><strong>BER &gt; 0:</strong> As channel noise increases, $L^*$ shifts downward to minimize frame error probability!</li>
+                </ul>
+              </div>
+
+            </div>
+
+            <!-- Mathematical Model Interactive Calculator -->
+            <div class="theory-calc-card">
+              <h4>Interactive Mathematical Model Calculator</h4>
+              <div class="calc-params-row">
+                <div class="calc-param">
+                  <span>Selected Payload ($L$):</span>
+                  <strong id="calcPayloadDisp" class="mono">1024 B</strong>
+                </div>
+                <div class="calc-param">
+                  <span>Frame Size ($L + H$):</span>
+                  <strong id="calcFrameDisp" class="mono">1064 B (8,512 bits)</strong>
+                </div>
+                <div class="calc-param">
+                  <span>Bit Error Rate:</span>
+                  <strong id="calcBerDisp" class="mono">0.0</strong>
+                </div>
+                <div class="calc-param">
+                  <span>Frame Error Prob ($P_{err}$):</span>
+                  <strong id="calcPerrDisp" class="mono text-green">0.000%</strong>
+                </div>
+                <div class="calc-param">
+                  <span>Expected Attempts / Frame:</span>
+                  <strong id="calcExpTxDisp" class="mono">1.000</strong>
+                </div>
+                <div class="calc-param">
+                  <span>Theoretical Max Goodput:</span>
+                  <strong id="calcGoodputDisp" class="mono text-accent">0.392 Mbps</strong>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ================= TAB 4: PACKET INSPECTOR ================= -->
+        <section class="tab-pane" id="paneInspector">
+          <div class="inspector-card">
+            
+            <div class="inspector-header">
+              <div class="inspector-title">
+                <h3>Wireshark-Style Packet Transmission Inspector</h3>
+                <span class="inspector-sub">Log of frames transferred during current simulation run</span>
+              </div>
+              <div class="inspector-filters">
+                <input type="text" id="inspectorSearch" placeholder="Filter by seq # or status...">
+                <div class="filter-pills" id="inspectorFilterPills">
+                  <button class="filter-pill active" data-filter="all">All</button>
+                  <button class="filter-pill" data-filter="success">Delivered</button>
+                  <button class="filter-pill" data-filter="retry">Retried</button>
+                  <button class="filter-pill" data-filter="failed">Failed</button>
+                </div>
+                <button class="action-btn ghost small" id="btnDownloadLogCSV">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  <span>Save CSV</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-container">
+              <table class="packet-table" id="packetTable">
+                <thead>
+                  <tr>
+                    <th>Seq #</th>
+                    <th>Payload (B)</th>
+                    <th>Wire (B)</th>
+                    <th>Attempts</th>
+                    <th>Status</th>
+                    <th>Start (s)</th>
+                    <th>End (s)</th>
+                    <th>Latency (ms)</th>
+                  </tr>
+                </thead>
+                <tbody id="packetTableBody">
+                  <tr>
+                    <td colspan="8" class="text-center empty-state">No packets logged yet. Run a simulation to populate the table.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="table-pagination">
+              <span id="pageInfo">Showing 0 of 0 packets</span>
+              <div class="page-buttons">
+                <button id="btnPrevPage" class="page-btn" disabled>Previous</button>
+                <button id="btnNextPage" class="page-btn" disabled>Next</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ================= TAB 5: PYTHON BACKEND & PLOTS ================= -->
+        <section class="tab-pane" id="panePython">
+          <div class="python-card">
+            
+            <div class="python-header">
+              <div>
+                <h3>Python Simulator & Matplotlib Graph Viewer</h3>
+                <p>Direct integration with <code>packet_sim.py</code>. Run full Monte-Carlo sweeps (20 trials) and view the high-resolution Matplotlib figures.</p>
+              </div>
+              <button class="action-btn primary" id="btnExecutePythonScript">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Run packet_sim.py</span>
+              </button>
+            </div>
+
+            <!-- Execution Status Banner -->
+            <div class="exec-banner" id="pythonExecBanner" style="display: none;">
+              <div class="spinner" id="pythonSpinner"></div>
+              <span id="pythonExecMsg">Running Python simulation (20 trials)...</span>
+            </div>
+
+            <!-- Python Output Terminal -->
+            <div class="terminal-card">
+              <div class="terminal-bar">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot green"></span>
+                <span class="terminal-title">python packet_sim.py · STDOUT</span>
+              </div>
+              <pre class="terminal-body" id="pythonStdout">Click "Run packet_sim.py" above to execute the Python script or view existing results.</pre>
+            </div>
+
+            <!-- Matplotlib Figures Gallery -->
+            <div class="gallery-section">
+              <h4>Generated Matplotlib Figures (<code>results/*.png</code>)</h4>
+              <div class="gallery-grid" id="galleryGrid">
+                <!-- Dynamically loaded images -->
+                <div class="gallery-item">
+                  <div class="gallery-label">exp1_throughput.png (Throughput vs. Packet Size, BER=0)</div>
+                  <img src="/results/exp1_throughput.png" alt="Exp 1 Throughput" onerror="this.src=''; this.alt='Run Python script to generate image';">
+                </div>
+                <div class="gallery-item">
+                  <div class="gallery-label">exp1_latency.png (Latency vs. Packet Size, BER=0)</div>
+                  <img src="/results/exp1_latency.png" alt="Exp 1 Latency" onerror="this.src=''; this.alt='Run Python script to generate image';">
+                </div>
+                <div class="gallery-item">
+                  <div class="gallery-label">exp2_goodput.png (Goodput vs. Packet Size under Multi-BER)</div>
+                  <img src="/results/exp2_goodput.png" alt="Exp 2 Goodput" onerror="this.src=''; this.alt='Run Python script to generate image';">
+                </div>
+                <div class="gallery-item">
+                  <div class="gallery-label">exp2_latency.png (Latency vs. Packet Size under Multi-BER)</div>
+                  <img src="/results/exp2_latency.png" alt="Exp 2 Latency" onerror="this.src=''; this.alt='Run Python script to generate image';">
+                </div>
+                <div class="gallery-item">
+                  <div class="gallery-label">exp2_retx.png (Retransmissions vs. Packet Size)</div>
+                  <img src="/results/exp2_retx.png" alt="Exp 2 Retx" onerror="this.src=''; this.alt='Run Python script to generate image';">
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+  </div>
+
+  <!-- JavaScript Module -->
+  <script src="app.js"></script>
+</body>
+</html>
