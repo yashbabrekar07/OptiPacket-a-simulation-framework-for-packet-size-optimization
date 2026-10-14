@@ -232,6 +232,29 @@ function findOptimalPacketSize(cfg) {
 // =============================================================================
 
 function setupEventListeners() {
+  // Soft UI Theme Toggle
+  const themeBtn = document.getElementById('btnThemeToggle');
+  if (themeBtn) {
+    const savedTheme = localStorage.getItem('pulse_theme');
+    if (savedTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    themeBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      const newTheme = current === 'dark' ? 'light' : 'dark';
+      if (newTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('pulse_theme', 'dark');
+        showNotification('Switched to Dark Neumorphism (Soft Slate)');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('pulse_theme', 'light');
+        showNotification('Switched to Classic Neumorphism (Soft Gray #e0e5ec)');
+      }
+      updateChartsTheme();
+    });
+  }
+
   // Range sliders
   const elBw = document.getElementById('cfgBandwidth');
   const elDelay = document.getElementById('cfgDelay');
@@ -842,12 +865,48 @@ const CHART_COLORS = [
   { border: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)', name: 'BER=1e-4' }
 ];
 
+function getChartThemeColors() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    grid: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(163, 177, 198, 0.35)',
+    ticks: isDark ? '#94a3b8' : '#4a5568',
+    legend: isDark ? '#cbd5e1' : '#1e293b',
+    title: isDark ? '#f8fafc' : '#1e293b',
+    tooltipBg: isDark ? '#1e232b' : '#e0e5ec',
+    tooltipBorder: isDark ? '#282f3a' : '#a3b1c6',
+    tooltipText: isDark ? '#f8fafc' : '#1e293b'
+  };
+}
+
+function updateChartsTheme() {
+  if (!chartsInitialized) return;
+  const theme = getChartThemeColors();
+  const allCharts = [chartGoodput, chartThroughput, chartLatency, chartRetx];
+  allCharts.forEach(c => {
+    if (!c) return;
+    c.options.scales.x.grid.color = theme.grid;
+    c.options.scales.x.ticks.color = theme.ticks;
+    c.options.scales.x.title.color = theme.title;
+    c.options.scales.y.grid.color = theme.grid;
+    c.options.scales.y.ticks.color = theme.ticks;
+    c.options.scales.y.title.color = theme.title;
+    c.options.plugins.legend.labels.color = theme.legend;
+    c.options.plugins.tooltip.backgroundColor = theme.tooltipBg;
+    c.options.plugins.tooltip.borderColor = theme.tooltipBorder;
+    c.options.plugins.tooltip.titleColor = theme.tooltipText;
+    c.options.plugins.tooltip.bodyColor = theme.tooltipText;
+    c.update();
+  });
+}
+
 function initCharts() {
   if (chartsInitialized) return;
   if (typeof Chart === 'undefined') {
     console.warn('Chart.js not loaded yet');
     return;
   }
+
+  const theme = getChartThemeColors();
 
   const commonOptions = {
     responsive: true,
@@ -856,15 +915,17 @@ function initCharts() {
     plugins: {
       legend: {
         labels: {
-          color: '#94a3b8',
-          font: { family: 'Inter', size: 11 },
+          color: theme.legend,
+          font: { family: 'Plus Jakarta Sans', size: 11, weight: '600' },
           boxWidth: 12
         }
       },
       tooltip: {
-        backgroundColor: '#0f172a',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: theme.tooltipBg,
+        borderColor: theme.tooltipBorder,
         borderWidth: 1,
+        titleColor: theme.tooltipText,
+        bodyColor: theme.tooltipText,
         titleFont: { family: 'Plus Jakarta Sans', size: 12, weight: 'bold' },
         bodyFont: { family: 'JetBrains Mono', size: 11 },
         padding: 10,
@@ -873,13 +934,13 @@ function initCharts() {
     },
     scales: {
       x: {
-        grid: { color: 'rgba(255, 255, 255, 0.04)' },
-        ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
-        title: { display: true, text: 'Payload Size (Bytes)', color: '#94a3b8', font: { size: 11 } }
+        grid: { color: theme.grid },
+        ticks: { color: theme.ticks, font: { family: 'JetBrains Mono', size: 10, weight: '600' } },
+        title: { display: true, text: 'Payload Size (Bytes)', color: theme.title, font: { size: 11, weight: '700' } }
       },
       y: {
-        grid: { color: 'rgba(255, 255, 255, 0.04)' },
-        ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+        grid: { color: theme.grid },
+        ticks: { color: theme.ticks, font: { family: 'JetBrains Mono', size: 10, weight: '600' } }
       }
     }
   };
@@ -893,7 +954,7 @@ function initCharts() {
       ...commonOptions,
       scales: {
         ...commonOptions.scales,
-        y: { ...commonOptions.scales.y, title: { display: true, text: 'Goodput (Mbps)', color: '#94a3b8' } }
+        y: { ...commonOptions.scales.y, title: { display: true, text: 'Goodput (Mbps)', color: theme.title, font: { weight: '700' } } }
       }
     }
   });
@@ -907,7 +968,7 @@ function initCharts() {
       ...commonOptions,
       scales: {
         ...commonOptions.scales,
-        y: { ...commonOptions.scales.y, title: { display: true, text: 'Throughput (Mbps)', color: '#94a3b8' } }
+        y: { ...commonOptions.scales.y, title: { display: true, text: 'Throughput (Mbps)', color: theme.title, font: { weight: '700' } } }
       }
     }
   });
@@ -921,7 +982,7 @@ function initCharts() {
       ...commonOptions,
       scales: {
         ...commonOptions.scales,
-        y: { ...commonOptions.scales.y, title: { display: true, text: 'Latency (ms)', color: '#94a3b8' } }
+        y: { ...commonOptions.scales.y, title: { display: true, text: 'Latency (ms)', color: theme.title, font: { weight: '700' } } }
       }
     }
   });
@@ -935,7 +996,7 @@ function initCharts() {
       ...commonOptions,
       scales: {
         ...commonOptions.scales,
-        y: { ...commonOptions.scales.y, title: { display: true, text: 'Retx / Packet', color: '#94a3b8' } }
+        y: { ...commonOptions.scales.y, title: { display: true, text: 'Retx / Packet', color: theme.title, font: { weight: '700' } } }
       }
     }
   });
@@ -1286,21 +1347,6 @@ function showNotification(msg) {
 
   const toast = document.createElement('div');
   toast.id = 'toastNotice';
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: #0f172a;
-    color: #f1f5f9;
-    padding: 10px 18px;
-    border-radius: 8px;
-    border: 1px solid rgba(56, 189, 248, 0.4);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-    font-family: 'Inter', sans-serif;
-    font-size: 12px;
-    z-index: 9999;
-    animation: fadeIn 0.2s ease-out;
-  `;
   toast.textContent = msg;
   document.body.appendChild(toast);
 
