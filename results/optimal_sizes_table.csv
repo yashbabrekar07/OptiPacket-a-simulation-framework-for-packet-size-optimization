@@ -1,0 +1,5 @@
+Scenario,Bandwidth (Mbps),Delay (ms),BER,Optimal Packet Size (Simulated),Peak Goodput (Mbps),Theoretical Optimum
+Gigabit LAN,100.0,1.0,1e-08,4096 B,88.743,8192 B
+Corporate WAN,10.0,50.0,1e-06,4096 B,3.168,8192 B
+Satellite GEO,10.0,280.0,1e-05,4096 B,0.532,8192 B
+Challenged Wireless,15.0,20.0,0.0001,1024 B,0.313,1228 B

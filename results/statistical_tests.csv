@@ -1,0 +1,5 @@
+Packet Size,SW Mean Goodput (Mbps),GBN Mean Goodput (Mbps),SR Mean Goodput (Mbps),GBN vs SW (t-stat),GBN vs SW (p-val),GBN vs SW (Sig < 0.05),SR vs GBN (t-stat),SR vs GBN (p-val),SR vs GBN (Sig < 0.05),Mann-Whitney SR vs GBN (p-val)
+256 B,0.094,0.491,0.608,214.34,1.33e-41,Yes,22.70,7.75e-21,Yes,1.42e-09
+1024 B,0.315,0.793,1.662,29.34,1.36e-20,Yes,30.51,1.26e-30,Yes,1.42e-09
+1460 B,0.412,0.736,2.016,15.38,1.53e-14,Yes,27.22,4.50e-25,Yes,1.42e-09
+4096 B,0.650,0.514,2.593,-5.52,3.68e-06,Yes,24.22,4.45e-20,Yes,1.42e-09
